@@ -26,7 +26,15 @@ class ChatRoom extends Component
         $this->user = Auth::user();
         $this->users = User::whereNot('id', $this->user->id)->get();
         // $this->chats = Chat::where('user_id', $this->user->id)->get();
+        $this->chats = $this->user->chats;
 
+
+        
+        $chat = Chat::whereHas('users', function($q){
+            $q->where('id', $this->user->id);
+        })->get();
+
+  
         // dd($this->user);
     }
 
@@ -42,6 +50,7 @@ class ChatRoom extends Component
         
         $logued_user = auth()->user();
 
+       
         $chat_exist = $logued_user->chats()->whereHas('users', function ($q) use ($id) {
             $q->where('id', $id);
         })->first();
@@ -75,7 +84,9 @@ class ChatRoom extends Component
     {
 
         $user = User::find($id);
-  
+
+        dd(Chat::all());
+
         $last_message = $user->messages()->latest()->first() ?? false; 
 
         if($last_message){
