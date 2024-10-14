@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Floor Plan</title>
+    <script src="https://cdn.jsdelivr.net/npm/konva@8.3.7/konva.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .controls {
+            text-align: center;
+            padding: 10px;
+            background: #f0f0f0;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+        #container-wrapper {
+            background-color: #cccccc; /* Fondo gris fuera del lienzo */
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto; /* Permitir desplazamiento */
+            position: relative;
+            zoom: 0.6; /* Nivel de zoom inicial */
+        }
+        #container {
+            background-color: white; /* Fondo blanco para el lienzo */
+            width: 1600px;
+            height: 1200px;
+            border: 1px solid black;
+            position: relative; /* Importante para centrar el contenido interno */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button id="add-room">Agregar espacio</button>
+        <button id="delete-room">Eliminar espacio</button>
+        <button id="download">Descargar</button>
+        <button id="zoom-in">Acercar</button>
+        <button id="zoom-out">Alejar</button>
+        <button id="fullscreen">Pantalla completa</button>
+        <input type="text" id="room-name" placeholder="Nombre del espacio" />
+    </div>
+    <div id="container-wrapper">
+        <div id="container"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var fixedWidth = 1600;  // Tamaño fijo para el lienzo
+            var fixedHeight = 1200; // Tamaño fijo para el lienzo
+            var minZoom = 0.2;      // Zoom mínimo
+            var maxZoom = 2;        // Zoom máximo
+
+            var containerWrapper = document.getElementById('container-wrapper');
+            var container = document.getElementById('container');
+
+            var stage = new Konva.Stage({
+                container: 'container',
+                width: fixedWidth,
+                height: fixedHeight,
+                draggable: false
+            });
+
+            var layer = new Konva.Layer();
+            stage.add(layer);
+
+            // Añadir un rectángulo de fondo blanco al lienzo
+            var background = new Konva.Rect({
+                x: 0,
+                y: 0,
+                width: fixedWidth,
+                height: fixedHeight,
+                fill: 'white',
+                listening: false // No recibir eventos
+            });
+            layer.add(background);
+
+            var tr = new Konva.Transformer({
+                enabledAnchors: ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'top-center', 'bottom-center', 'middle-left', 'middle-right'],
+                boundBoxFunc: function(oldBox, newBox) {
+                    newBox.width = Math.max(30, newBox.width);
+                    newBox.height = Math.max(20, newBox.height);
+                    return newBox;
+                }
+            });
+            layer.add(tr);
+
+            function createRoom(x, y, width, height, text) {
+                var group = new Konva.Group({
+                    x: x,
+                    y: y,
+                    draggable: true,
+                    width: width,
+                    height: height
+                });
+
+                var rect = new Konva.Rect({
+                    width: width,
+                    height: height,
+                    fill: 'white',
+                    stroke: 'black',
+                    strokeWidth: 2
+                });
+
+                var label = new Konva.Text({
+                    text: text,
+                    fontSize: 16,
+                    fontFamily: 'Calibri',
+                    fill: 'black',
+                    width: width,
+                    height: height,
+                    align: 'center',
+                    verticalAlign: 'middle'
+                });
+
+                group.add(rect);
+                group.add(label);
+                layer.add(group);
+
+                group.on('click', function(e) {
+                    // Verificar si el clic fue sobre el grupo
+                    if (e.target === rect || e.target === label) {
+                        tr.nodes([group]);
+                        selectedRoom = group;
+                        document.getElementById('room-name').value = label.text();
+                    } else {
+                        tr.nodes([]);
+                        selectedRoom = null;
+                    }
+                });
+
+                group.on('transform', function() {
+                    // Restablecer la escala del grupo después de la transformación
+                    var scaleX = group.scaleX();
+                    var scaleY = group.scaleY();
+                    group.scaleX(1);
+                    group.scaleY(1);
+
+                    // Actualizar el tamaño del rectángulo y la etiqueta
+                    rect.width(rect.width() * scaleX);
+                    rect.height(rect.height() * scaleY);
+                    label.width(rect.width());
+                    label.height(rect.height());
+
+                    // Ajustar la fuente del texto para que se mantenga centrado y legible
+                    var fontSize = Math.min(rect.width(), rect.height()) / 3;
+                    label.fontSize(fontSize);
+                });
+
+                group.on('dragmove', function() {
+                    // Limitar el movimiento del grupo para que no se salga del fondo
+                    var pos = group.position();
+                    pos.x = Math.max(0, Math.min(pos.x, fixedWidth - group.width()));
+                    pos.y = Math.max(0, Math.min(pos.y, fixedHeight - group.height()));
+                    group.position(pos);
+                });
+
+                layer.draw();
+            }
+
+            var selectedRoom = null;
+
+            document.getElementById('add-room').addEventListener('click', function() {
+                createRoom(50, 50, 150, 100, 'Nuevo espacio');
+            });
+
+            document.getElementById('delete-room').addEventListener('click', function() {
+                if (selectedRoom) {
+                    selectedRoom.destroy();
+                    tr.nodes([]);
+                    layer.draw();
+                    selectedRoom = null;
+                    document.getElementById('room-name').value = '';
+                }
+            });
+
+            document.getElementById('room-name').addEventListener('input', function() {
+                if (selectedRoom) {
+                    var label = selectedRoom.findOne('Text');
+                    label.text(this.value);
+                    layer.draw();
+                }
+            });
+
+            document.getElementById('download').addEventListener('click', function() {
+                tr.detach();
+                layer.draw();
+                var dataURL = stage.toDataURL({ width: fixedWidth, height: fixedHeight });
+                var link = document.createElement('a');
+                link.download = 'croquis.png';
+                link.href = dataURL;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                layer.add(tr);
+                layer.draw();
+            });
+
+            document.getElementById('zoom-in').addEventListener('click', function() {
+                var currentZoom = parseFloat(containerWrapper.style.zoom) || 1;
+                var newZoom = Math.min(currentZoom * 1.2, maxZoom);
+                containerWrapper.style.zoom = newZoom;
+            });
+
+            document.getElementById('zoom-out').addEventListener('click', function() {
+                var currentZoom = parseFloat(containerWrapper.style.zoom) || 1;
+                var newZoom = Math.max(currentZoom / 1.2, minZoom);
+                containerWrapper.style.zoom = newZoom;
+            });
+
+            document.getElementById('fullscreen').addEventListener('click', function() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    }
+                }
+            });
+
+            createRoom(50, 50, 200, 150, 'Patio');
+            createRoom(50, 210, 200, 100, 'Cuarto 1');
+            createRoom(50, 320, 200, 100, 'Estanque');
+            createRoom(50, 430, 200, 100, 'Jardín');
+            createRoom(260, 50, 200, 100, 'Cocina');
+            createRoom(260, 160, 200, 100, 'Comedor');
+            createRoom(260, 270, 200, 100, 'Sala');
+            createRoom(260, 380, 200, 150, 'Cochera');
+
+            // Permitir el desplazamiento (pan) del contenedor
+            var isPanning = false;
+            var startX, startY;
+
+            containerWrapper.addEventListener('mousedown', function(e) {
+                isPanning = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                containerWrapper.style.cursor = 'grabbing';
+            });
+
+            containerWrapper.addEventListener('mousemove', function(e) {
+                if (!isPanning) return;
+                var x = e.clientX - startX + containerWrapper.scrollLeft;
+                var y = e.clientY - startY + containerWrapper.scrollTop;
+                containerWrapper.scrollLeft = x;
+                containerWrapper.scrollTop = y;
+                startX = e.clientX;
+                startY = e.clientY;
+            });
+
+            containerWrapper.addEventListener('mouseup', function() {
+                isPanning = false;
+                containerWrapper.style.cursor = 'default';
+            });
+
+            containerWrapper.addEventListener('mouseleave', function() {
+                isPanning = false;
+                containerWrapper.style.cursor = 'default';
+            });
+
+            // Ajustar el tamaño del contenedor al cambiar el tamaño de la ventana para que ocupe toda la pantalla
+            function adjustContainerSize() {
+                containerWrapper.style.width = '100%';
+                containerWrapper.style.height = (window.innerHeight - document.querySelector('.controls').offsetHeight) + 'px';
+            }
+
+            window.addEventListener('resize', adjustContainerSize);
+            adjustContainerSize(); // Ajustar el tamaño al cargar la página
+
+            // Corregir coordenadas de clic en función del zoom
+            stage.on('click', function(e) {
+                var zoomLevel = parseFloat(containerWrapper.style.zoom) || 1;
+                var pointerPosition = stage.getPointerPosition();
+                var adjustedPointerPosition = {
+                    x: pointerPosition.x / zoomLevel,
+                    y: pointerPosition.y / zoomLevel
+                };
+                var shape = layer.getIntersection(adjustedPointerPosition);
+                if (!shape) {
+                    tr.nodes([]);
+                    selectedRoom = null;
+                    document.getElementById('room-name').value = '';
+                } else {
+                    tr.nodes([shape.getParent()]);
+                    selectedRoom = shape.getParent();
+                    document.getElementById('room-name').value = selectedRoom.findOne('Text').text();
+                }
+            });
+
+        });
+    </script>
+</body>
+</html>
