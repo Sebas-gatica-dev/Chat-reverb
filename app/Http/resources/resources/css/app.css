@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.tooltip {
+    @apply invisible absolute bg-black text-white rounded-lg shadow-lg px-2 py-0.5 border border-gray-700 opacity-0 transition-opacity duration-300 -mt-14 left-1/2 transform -translate-x-1/2 w-auto whitespace-nowrap z-50;
+}
+
+.has-tooltip {
+    @apply relative;
+}
+
+.has-tooltip:hover .tooltip {
+    @apply visible opacity-100;
+}
